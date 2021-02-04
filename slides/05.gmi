@@ -1,0 +1,9 @@
+# Thanks!
+
+These slides are hosted on IPFS and have been browsed using the Gemini-IPFS gateway.
+
+Some links:
+
+=> https://github.com/hsanjuan/gemini-ipfs-gateway
+=> https://gemini.circumlunar.space/
+=> https://github.com/hsanjuan/ipfs-lite

@@ -1,0 +1,10 @@
+# Future work
+
+* CLI flags (now it just runs)
+* Persistent storage (now just in-mem)
+* Test large files and ensure no problems with client test suite when hosted on IPFS.
+* Host a permanent gateway
+* Reach out to Gemini-community
+* Collaborative cluster for Gemini sites
+
+=> 05.gmi Next

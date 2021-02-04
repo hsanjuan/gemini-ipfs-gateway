@@ -1,0 +1,9 @@
+## IPFS!
+
+Yes! IPFS excels at caching data and moving small blocks arounds.
+
+Gemini websites are meant to be ultra-lightweight and fast.
+
+People using Gemini clients should have access to IPFS!
+
+=> 03.gmi Next

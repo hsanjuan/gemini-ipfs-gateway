@@ -1,0 +1,11 @@
+# About Gemini
+
+Gemini is an application layer protocol (like HTTP) which is inspired in Gopher (one of the early internet protocols) and which aims for maximum simplicity.
+
+As a protocol, it has many pitfalls, but it is simple!
+
+One of the shortcomings per their own FAQ is the "lack of support for caching, compression and resumption of interrupted downloads".
+
+But, guess who is awesome at caching stuff, even when partially downloaded?
+
+=> 02.gmi Next

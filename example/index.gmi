@@ -1,0 +1,19 @@
+# Gemini-IPFS example site
+
+
+This is an example Gemini site hosted on IPFS.
+
+
+The path you are visiting is actually a path to an IPFS folder, and you are reading the index.gmi file, which is automatically served when present in the folder.
+
+When a folder does not have an index.gmi file in it, a directory listing is presented:
+
+=> folder/
+
+All files with .gmi extension will be returned with a declared text/gemini content-type. Of course, the gateway supports other file formats and automatically sets the content-type accordingly. For example, here you can see the ipfs-lite logo:
+
+=> folder/ipfs-lite.png
+
+ipfs-lite is a simple, easy-to-embed go-ipfs node, which powers this gateway. You can check it out at:
+
+=> https://github.com/hsanjuan/ipfs-lite

@@ -1,0 +1,13 @@
+# Contributing
+
+If you are here, you might be interested in contributing to IPFS, Gemini or some other cool projects.
+
+Here are some links:
+
+=> gemini://gemini.circumlunar.space Gemini official site
+=> https://github.com/hsanjuan/gemini-ipfs-gateway Gemini-IPFS gateway repository
+=> https://ipfs.io IPFS official site
+=> https://discuss.ipfs.io IPFS support forums
+=> https://github.com/hsanjuan/ipfs-lite IPFS-lite repository
+
+Have fun!
