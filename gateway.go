@@ -3,16 +3,17 @@ package main
 import (
 	"context"
 	"crypto/ecdsa"
-	"crypto/rand"
+	"crypto/sha1"
 	"crypto/tls"
 	"fmt"
 	"io"
 	"net"
 	"strings"
+	"sync"
 	"time"
 
 	gemini "git.sr.ht/~adnano/go-gemini"
-	"github.com/gabriel-vasile/mimetype"
+	mimetype "github.com/gabriel-vasile/mimetype"
 	ipfslite "github.com/hsanjuan/ipfs-lite"
 	ds "github.com/ipfs/go-datastore"
 	ipld "github.com/ipfs/go-ipld-format"
@@ -24,20 +25,24 @@ import (
 	crypto "github.com/libp2p/go-libp2p-core/crypto"
 	host "github.com/libp2p/go-libp2p-core/host"
 	routing "github.com/libp2p/go-libp2p-core/routing"
+	ma "github.com/multiformats/go-multiaddr"
+	manet "github.com/multiformats/go-multiaddr/net"
 	zap "go.uber.org/zap"
 )
 
 var logger = logging.Logger("gemini")
 
 type Config struct {
-	ListenIP    string
-	ListenPort  string
-	ReadTimeout time.Duration
-	//ReadHeaderTimeout time.Duration
-	WriteTimeout time.Duration
-	//IdleTimeout       time.Duration
-	//MaxHeaderBytes    int
+	Identity    *ecdsa.PrivateKey
+	Certificate tls.Certificate
 
+	GatewayListenAddresses []string
+	PeerListenAddresses    []string
+
+	TLSListeners bool
+
+	ReadTimeout    time.Duration
+	WriteTimeout   time.Duration
 	GatewayTimeout time.Duration
 }
 
@@ -53,37 +58,42 @@ type Gateway struct {
 	dht  routing.Routing
 	h    host.Host
 
-	server   *gemini.Server
-	listener net.Listener
-	tlsKey   *ecdsa.PrivateKey
-	tls      *tls.Config
+	server    *gemini.Server
+	listeners []net.Listener
 }
 
 func NewGateway(ctx context.Context, store ds.Batching, cfg Config) (*Gateway, error) {
 	ctx, cancel := context.WithCancel(ctx)
 
-	ecdsaPriv, err := ecdsa.GenerateKey(crypto.ECDSACurve, rand.Reader)
-	if err != nil {
-		return nil, err
-	}
-
-	priv, _, err := crypto.ECDSAKeyPairFromKey(ecdsaPriv)
+	// Key for libp2p host.
+	priv, _, err := crypto.ECDSAKeyPairFromKey(cfg.Identity)
 	if err != nil {
 		logger.Error(err)
 		return nil, err
 	}
 
-	netIP := net.ParseIP(cfg.ListenIP)
+	if cfg.TLSListeners {
+		fingerprint := sha1.Sum(cfg.Certificate.Certificate[0])
+		logger.Infof("Using TLS certificate with fingerprint %X", fingerprint)
+	}
 
-	tlsCfg, err := generateTLSconfig(ecdsaPriv, netIP)
-	if err != nil {
-		return nil, err
+	var maddrs []ma.Multiaddr
+	for _, pAddr := range cfg.PeerListenAddresses {
+		tcpAddr, err := net.ResolveTCPAddr("tcp", pAddr)
+		if err != nil {
+			return nil, fmt.Errorf("error parsing peer listen address %s: %w", tcpAddr, err)
+		}
+		maddr, err := manet.FromNetAddr(tcpAddr)
+		if err != nil {
+			return nil, fmt.Errorf("error converting to multiaddress: %s: %w", tcpAddr, err)
+		}
+		maddrs = append(maddrs, maddr)
 	}
 
 	h, dht, err := setupLibp2p(
 		ctx,
 		priv,
-		nil,
+		maddrs,
 		store,
 		libp2pOptionsExtra...,
 	)
@@ -129,15 +139,13 @@ func NewGateway(ctx context.Context, store ds.Batching, cfg Config) (*Gateway, e
 		dht:    dht,
 		h:      h,
 		server: s,
-		tlsKey: ecdsaPriv,
-		tls:    tlsCfg,
 	}
 
 	// Shutdown gateway on context cancellation.
 	go func() {
 		<-gw.ctx.Done()
-		if gw.listener != nil {
-			gw.listener.Close()
+		for _, l := range gw.listeners {
+			l.Close()
 		}
 	}()
 
@@ -150,24 +158,53 @@ func NewGateway(ctx context.Context, store ds.Batching, cfg Config) (*Gateway, e
 }
 
 func (gw *Gateway) ListenAndServe() error {
-	listenAddr := fmt.Sprintf("%s:%s", gw.cfg.ListenIP, gw.cfg.ListenPort)
-	listener, err := tls.Listen("tcp", listenAddr, gw.tls)
-	//listener, err := net.Listen("tcp", listenAddr)
-	if err != nil {
-		return err
+	var wg sync.WaitGroup
+
+	tlsCfg := &tls.Config{
+		MinVersion:               tls.VersionTLS13,
+		PreferServerCipherSuites: false,
+		//InsecureSkipVerify:       true, // This is not insecure here. We will verify the cert chain ourselves.
+		//ClientAuth:               tls.NoClientCert,
+		Certificates: []tls.Certificate{gw.cfg.Certificate},
+
+		//
+		// VerifyPeerCertificate: func(_ [][]byte, _ [][]*x509.Certificate) error {
+		// 	panic("tls config not specialized for peer")
+		// },
+		// Probably not needed
+		NextProtos:             []string{"gemini"},
+		SessionTicketsDisabled: true,
 	}
 
-	gw.listener = listener
+	for _, addr := range gw.cfg.GatewayListenAddresses {
+		var l net.Listener
+		var err error
+		if gw.cfg.TLSListeners {
+			l, err = tls.Listen("tcp", addr, tlsCfg)
+		} else {
+			l, err = net.Listen("tcp", addr)
+		}
+		if err != nil {
+			return fmt.Errorf("error listening on %s: %w", addr, err)
+		}
+		gw.listeners = append(gw.listeners, l)
 
-	logger.Infof("Listening on %s", listenAddr)
-
-	err = gw.server.Serve(listener)
-	select {
-	case <-gw.ctx.Done():
-		return nil
-	default:
-		return err
+		wg.Add(1)
+		go func(addr string, l net.Listener) {
+			defer wg.Done()
+			logger.Infof("Gemini gateway listening on %s", addr)
+			err = gw.server.Serve(l)
+			select {
+			case <-gw.ctx.Done():
+			default:
+				if err != nil {
+					logger.Error(err)
+				}
+			}
+		}(addr, l)
 	}
+	wg.Wait()
+	return nil
 }
 
 func (gw *Gateway) handle(w *gemini.ResponseWriter, r *gemini.Request) {
