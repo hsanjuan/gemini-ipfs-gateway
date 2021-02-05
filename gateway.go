@@ -252,7 +252,7 @@ func (gw *Gateway) handleIPFS(w *gemini.ResponseWriter, r *gemini.Request) {
 	// unixfs?
 	fsnode, err := unixfs.ExtractFSNode(n)
 	if err != nil {
-		err = fmt.Errorf("path is not a unixfs node (%s): %w", err)
+		err = fmt.Errorf("path is not a unixfs node (%s): %w", p, err)
 		logger.Debug(err)
 		w.Header(gemini.StatusPermanentFailure, err.Error())
 		return
