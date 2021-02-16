@@ -1,7 +1,5 @@
 # Gemini-IPFS Gateway
 
-This gateway exposes IPFS content over the [Gemini-protocol](https://gemini.circumlunar.space/).
+This project has moved to [git.sr.ht/~hsanjuan/gemini-ipfs-gateway](https://git.sr.ht/~hsanjuan/gemini-ipfs-gateway).
 
-Otherwise said, it allows to browse Gemini-sites (text/gemini) that are hosted on the IPFS network using Gemini-clients.
-
-Runs as an all-contained-binary, based on [ipfs-lite](https://github.com/hsanjuan/ipfs-lite).
+This repository is no longer maintained on Github.
